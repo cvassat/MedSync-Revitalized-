@@ -5,7 +5,4 @@ dependencies:
   - python=3.10
   - pip
   - pip:
-    - streamlit
-    - supabase
-    - flake8
-    - pytest
+    - -r requirements-dev.txt

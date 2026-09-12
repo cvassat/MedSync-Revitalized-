@@ -1,15 +1,58 @@
+import logging
+import os
+from datetime import date, datetime
 
 import streamlit as st
-from supabase import create_client, Client
-from datetime import datetime
+from supabase import Client, create_client
 
-SUPABASE_URL = "https://slwbhftsdffvsiazhrjg.supabase.co"
-SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNsd2JoZnRzZGZmdnNpYXpocmpnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDc2Nzc3NzQsImV4cCI6MjA2MzI1Mzc3NH0.wScgpTbOkRj-Bz-V7IWNvOHBdt_eZ3kpQTr9UGhgz_k"
+logger = logging.getLogger(__name__)
+
+# Public anon key for the shared MedSync7 project. It is safe to publish
+# because every table is protected by row-level security, but a deployment
+# should still point at its own project via SUPABASE_URL / SUPABASE_KEY
+# (environment variables or .streamlit/secrets.toml).
+DEFAULT_SUPABASE_URL = "https://slwbhftsdffvsiazhrjg.supabase.co"
+DEFAULT_SUPABASE_KEY = (
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9."
+    "eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNsd2JoZnRzZGZmdnNpYXpocmpnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDc2Nzc3NzQs"
+    "ImV4cCI6MjA2MzI1Mzc3NH0."
+    "wScgpTbOkRj-Bz-V7IWNvOHBdt_eZ3kpQTr9UGhgz_k"
+)
+
+
+def _setting(name, default):
+    """Resolve a setting from the environment, then st.secrets, then a default."""
+    value = os.environ.get(name)
+    if value:
+        return value
+    try:
+        value = st.secrets.get(name)
+    except Exception:  # no secrets file, or secrets unavailable in this context
+        value = None
+    if isinstance(value, str) and value:
+        return value
+    return default
+
+
+SUPABASE_URL = _setting("SUPABASE_URL", DEFAULT_SUPABASE_URL)
+SUPABASE_KEY = _setting("SUPABASE_KEY", DEFAULT_SUPABASE_KEY)
+USING_DEFAULT_SUPABASE = (
+    SUPABASE_URL == DEFAULT_SUPABASE_URL and SUPABASE_KEY == DEFAULT_SUPABASE_KEY
+)
+
+if USING_DEFAULT_SUPABASE:
+    logger.warning(
+        "SUPABASE_URL / SUPABASE_KEY not set; using the default shared project. "
+        "Set them in the environment or .streamlit/secrets.toml for your own deployment."
+    )
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
+
 def show_login():
     st.title("Login to Medication Sync App")
+    if USING_DEFAULT_SUPABASE:
+        st.caption("Connected to the default shared Supabase project.")
     login_tab, signup_tab = st.tabs(["Login", "Sign Up"])
 
     with login_tab:
@@ -34,14 +77,15 @@ def show_login():
             except Exception as e:
                 st.error("Sign-up failed: " + str(e))
 
+
 def calculate_sync_quantities(current_meds, new_med, sync_date):
     results = []
-    sync_date = datetime.strptime(sync_date, "%Y-%m-%d")
-    today = datetime.today()
+    sync_date = datetime.strptime(sync_date, "%Y-%m-%d").date()
+    today = date.today()
     days_until_sync = (sync_date - today).days
 
-    if days_until_sync < 0:
-        st.error("Sync date must be in the future")
+    if days_until_sync <= 0:
+        st.error("Sync date must be after today")
         return []
 
     for med in current_meds:
@@ -62,6 +106,7 @@ def calculate_sync_quantities(current_meds, new_med, sync_date):
     })
 
     return results
+
 
 if 'user' not in st.session_state:
     show_login()
