@@ -1,5 +1,5 @@
 import sys
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from unittest.mock import MagicMock
 
 # Mock streamlit and supabase before importing the app module so the
@@ -19,7 +19,7 @@ def _future_date(days=30):
 
 
 def _days_until(sync_date_str):
-    return (datetime.strptime(sync_date_str, "%Y-%m-%d") - datetime.today()).days
+    return (datetime.strptime(sync_date_str, "%Y-%m-%d").date() - date.today()).days
 
 
 def test_new_medication_units():
@@ -66,6 +66,21 @@ def test_past_sync_date_returns_empty():
     new_med = {'name': 'NewMed', 'daily_dose': 1}
     result = calculate_sync_quantities([], new_med, past_date)
     assert result == []
+
+
+def test_sync_date_today_returns_empty():
+    """Today is not a valid sync date; nothing can be dispensed for zero days."""
+    today = date.today().strftime("%Y-%m-%d")
+    new_med = {'name': 'NewMed', 'daily_dose': 1}
+    assert calculate_sync_quantities([], new_med, today) == []
+
+
+def test_days_are_counted_as_whole_calendar_days():
+    """Tomorrow is exactly one day away regardless of the current time of day."""
+    tomorrow = _future_date(1)
+    new_med = {'name': 'NewMed', 'daily_dose': 3}
+    result = calculate_sync_quantities([], new_med, tomorrow)
+    assert result[0]['units_needed'] == 3
 
 
 def test_multiple_medications():

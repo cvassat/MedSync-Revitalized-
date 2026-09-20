@@ -2,20 +2,16 @@
 
 ## Supported Versions
 
-Use this section to tell people about which versions of your project are
-currently being supported with security updates.
-
-| Version | Supported          |
-| ------- | ------------------ |
-| 5.1.x   | :white_check_mark: |
-| 5.0.x   | :x:                |
-| 4.0.x   | :white_check_mark: |
-| < 4.0   | :x:                |
+MedSync7 has no versioned releases. Only the `main` branch receives fixes.
 
 ## Reporting a Vulnerability
 
-Use this section to tell people how to report a vulnerability.
+Open a private security advisory on GitHub for this repository, or contact the
+repository owner directly. Please do not open a public issue for a suspected
+vulnerability.
 
-Tell them where to go, how often they can expect to get an update on a
-reported vulnerability, what to expect if the vulnerability is accepted or
-declined, etc.
+## Secrets
+
+The app ships with a public Supabase anon key. It is not a secret. Never commit
+a service-role key, and keep deployment-specific values in environment variables
+or `.streamlit/secrets.toml`, which is ignored by git.

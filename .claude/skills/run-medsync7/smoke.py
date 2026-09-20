@@ -7,7 +7,7 @@ Usage:
   python smoke.py test                # AppTest unit verification (no browser)
   python smoke.py all                 # screenshot + test
 
-All paths are relative to the repo root (run from there).
+Works from any working directory; the app path is resolved from this file.
 Screenshots → /tmp/shots/
 """
 from __future__ import annotations
@@ -18,6 +18,8 @@ import time
 import urllib.request
 from pathlib import Path
 
+REPO_ROOT = Path(__file__).resolve().parents[3]
+APP = REPO_ROOT / "med_sync_app_final.py"
 CHROMIUM = "/opt/pw-browsers/chromium-1194/chrome-linux/chrome"
 SHOTS = Path("/tmp/shots")
 PORT = 8501
@@ -71,8 +73,8 @@ def cmd_screenshot() -> None:
 
 def cmd_screenshot_calc() -> None:
     """Launch a patched (auth-bypassed) server on 8502 and screenshot the calculator."""
-    import tempfile, textwrap, shutil
-    src = Path("med_sync_app_final.py").read_text()
+    import tempfile
+    src = APP.read_text()
     bypass = "st.session_state.setdefault('user', True)\n"
     patched = src.replace("if 'user' not in st.session_state:", bypass + "if 'user' not in st.session_state:")
     tmp = Path(tempfile.mktemp(suffix=".py"))
@@ -98,7 +100,7 @@ def cmd_test() -> None:
     from streamlit.testing.v1 import AppTest
     from datetime import date, timedelta
 
-    at = AppTest.from_file("med_sync_app_final.py", default_timeout=30)
+    at = AppTest.from_file(str(APP), default_timeout=30)
     at.session_state["user"] = True
     at.run()
 
