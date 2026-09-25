@@ -98,3 +98,24 @@ def test_multiple_medications():
     assert 'Med1' in names
     assert 'Med2' in names
     assert 'NewMed (new)' in names
+
+
+def test_invalid_sync_date_format_returns_empty():
+    """An invalid sync date string should fail safely and return no plan."""
+    new_med = {'name': 'NewMed', 'daily_dose': 1}
+    assert calculate_sync_quantities([], new_med, "10/12/2030") == []
+
+
+def test_empty_existing_medication_name_returns_empty():
+    """Existing medications must have names before calculating."""
+    sync_date = _future_date(15)
+    current_meds = [{'name': '   ', 'daily_dose': 1, 'remaining': 4}]
+    new_med = {'name': 'NewMed', 'daily_dose': 1}
+    assert calculate_sync_quantities(current_meds, new_med, sync_date) == []
+
+
+def test_empty_new_medication_name_returns_empty():
+    """New medication must have a non-empty name before calculating."""
+    sync_date = _future_date(15)
+    new_med = {'name': '', 'daily_dose': 1}
+    assert calculate_sync_quantities([], new_med, sync_date) == []

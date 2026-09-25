@@ -32,6 +32,14 @@ pytest        # unit tests for the sync calculation
 
 CI runs the same lint and test steps on every push and pull request.
 
+## Enterprise Readiness Improvements
+
+- Defensive input validation for login, sign-up, and medication fields
+- Safe sync-date parsing and validation with user-facing errors instead of crashes
+- Session logout action in the authenticated calculator view
+- Sanitized authentication error messages (detailed stack traces stay in logs)
+- Expanded unit tests for invalid and incomplete calculator inputs
+
 ## How the Calculation Works
 
 For each existing medication:
