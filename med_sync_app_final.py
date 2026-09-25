@@ -1,4 +1,5 @@
 import logging
+from numbers import Integral
 import os
 from datetime import date, datetime
 
@@ -54,10 +55,12 @@ def _clean_text(value):
 
 
 def _is_positive_int(value):
-    return isinstance(value, int) and value > 0
+    return isinstance(value, Integral) and value > 0
 
 
 def _parse_sync_date(sync_date):
+    if isinstance(sync_date, datetime):
+        return sync_date.date()
     if isinstance(sync_date, date):
         return sync_date
     if not isinstance(sync_date, str):
@@ -82,8 +85,12 @@ def _validate_sync_inputs(current_meds, new_med, sync_date):
             return None, "Every existing medication needs a name."
         if not _is_positive_int(med.get('daily_dose')):
             return None, f"Daily dose for {med.get('name', 'a medication')} must be a whole number above zero."
-        if not isinstance(med.get('remaining'), int) or med['remaining'] < 0:
-            return None, f"Remaining units for {med.get('name', 'a medication')} cannot be negative."
+        remaining = med.get('remaining')
+        if not isinstance(remaining, Integral) or remaining < 0:
+            return None, (
+                f"Remaining units for {med.get('name', 'a medication')} must be a whole number "
+                "that is zero or greater."
+            )
 
     if not _clean_text(new_med.get('name')):
         return None, "New medication needs a name."
@@ -93,8 +100,46 @@ def _validate_sync_inputs(current_meds, new_med, sync_date):
     return parsed_sync_date, ""
 
 
+def _handle_login_submission(email, password):
+    email = _clean_text(email)
+    if not email or not password:
+        st.error("Email and password are required.")
+        return
+    try:
+        auth_response = supabase.auth.sign_in_with_password({"email": email, "password": password})
+        authenticated_user = getattr(auth_response, "user", None)
+        authenticated_session = getattr(auth_response, "session", None)
+        if authenticated_user and authenticated_session:
+            st.session_state['user'] = authenticated_user
+            st.success("Logged in successfully!")
+        else:
+            st.error("Login failed. Please verify your credentials and try again.")
+    except Exception:
+        logger.exception("Login failed for provided credentials.")
+        st.error("Login failed. Please verify your credentials and try again.")
+
+
+def _handle_signup_submission(new_email, new_password):
+    new_email = _clean_text(new_email)
+    if not new_email or not new_password:
+        st.error("Email and password are required.")
+        return
+    if len(new_password) < 8:
+        st.error("Password must be at least 8 characters.")
+        return
+    try:
+        supabase.auth.sign_up({"email": new_email, "password": new_password})
+        st.success("Sign-up successful! Please check your email to confirm.")
+    except Exception:
+        logger.exception("Sign-up failed for provided email.")
+        st.error("Sign-up failed. Please try again later.")
+
+
 def show_login():
     st.title("Login to Medication Sync App")
+    logout_notice = st.session_state.pop("logout_notice", "")
+    if logout_notice:
+        st.warning(logout_notice)
     if USING_DEFAULT_SUPABASE:
         st.caption("Connected to the default shared Supabase project.")
     login_tab, signup_tab = st.tabs(["Login", "Sign Up"])
@@ -103,36 +148,13 @@ def show_login():
         email = st.text_input("Email", key="login_email")
         password = st.text_input("Password", type="password", key="login_password")
         if st.button("Login"):
-            email = _clean_text(email)
-            if not email or not password:
-                st.error("Email and password are required.")
-                return
-            try:
-                user = supabase.auth.sign_in_with_password({"email": email, "password": password})
-                if user:
-                    st.session_state['user'] = user
-                    st.success("Logged in successfully!")
-            except Exception as e:
-                logger.exception("Login failed for provided credentials: %s", e)
-                st.error("Login failed. Please verify your credentials and try again.")
+            _handle_login_submission(email, password)
 
     with signup_tab:
         new_email = st.text_input("New Email", key="signup_email")
         new_password = st.text_input("New Password", type="password", key="signup_password")
         if st.button("Sign Up"):
-            new_email = _clean_text(new_email)
-            if not new_email or not new_password:
-                st.error("Email and password are required.")
-                return
-            if len(new_password) < 8:
-                st.error("Password must be at least 8 characters.")
-                return
-            try:
-                supabase.auth.sign_up({"email": new_email, "password": new_password})
-                st.success("Sign-up successful! Please check your email to confirm.")
-            except Exception as e:
-                logger.exception("Sign-up failed for provided email: %s", e)
-                st.error("Sign-up failed. Please try again later.")
+            _handle_signup_submission(new_email, new_password)
 
 
 def calculate_sync_quantities(current_meds, new_med, sync_date):
@@ -145,16 +167,18 @@ def calculate_sync_quantities(current_meds, new_med, sync_date):
     days_until_sync = (validated_sync_date - date.today()).days
 
     for med in current_meds:
-        days_left = med['remaining'] // med['daily_dose']
+        remaining = int(med['remaining'])
+        daily_dose = int(med['daily_dose'])
+        days_left = remaining // daily_dose
         additional_days_needed = days_until_sync - days_left
-        units_needed = max(additional_days_needed * med['daily_dose'], 0)
+        units_needed = max(additional_days_needed * daily_dose, 0)
         results.append({
             'name': _clean_text(med['name']),
             'days_left': days_left,
             'units_needed': units_needed
         })
 
-    new_med_units = new_med['daily_dose'] * days_until_sync
+    new_med_units = int(new_med['daily_dose']) * days_until_sync
     results.append({
         'name': _clean_text(new_med['name']) + " (new)",
         'days_left': 0,
@@ -164,22 +188,43 @@ def calculate_sync_quantities(current_meds, new_med, sync_date):
     return results
 
 
-if 'user' not in st.session_state:
-    show_login()
-else:
-    st.title("Medication Sync Calculator")
-    if st.sidebar.button("Logout"):
-        st.session_state.pop('user', None)
-        st.rerun()
-    st.write("Calculate how many units are needed to align all medications, including a new one, to the same refill date.")
+def _handle_logout():
+    logout_notice = ""
+    try:
+        sign_out_result = supabase.auth.sign_out()
+        sign_out_error = getattr(sign_out_result, "error", None)
+        if isinstance(sign_out_result, dict):
+            sign_out_error = sign_out_result.get("error", sign_out_error)
+        if sign_out_error:
+            logger.warning("Supabase sign-out returned an error result.")
+            logout_notice = "Logged out locally, but Supabase sign-out could not be confirmed."
+    except Exception:
+        logger.exception("Supabase sign-out failed while logging out.")
+        logout_notice = "Logged out locally, but Supabase sign-out failed."
+    st.session_state.pop('user', None)
+    if logout_notice:
+        st.session_state['logout_notice'] = logout_notice
+    st.rerun()
 
+
+def _render_medication_form():
     with st.form("med_form"):
         num_meds = st.number_input("Number of existing medications", min_value=0, max_value=10, step=1, format="%d")
         meds = []
         for i in range(int(num_meds)):
             name = st.text_input(f"Medication {i+1} Name", key=f"name_{i}")
-            daily_dose = st.number_input(f"Daily Dose for Medication {i+1}", min_value=1, key=f"dose_{i}", format="%d")
-            remaining = st.number_input(f"Units Remaining for Medication {i+1}", min_value=0, key=f"remaining_{i}", format="%d")
+            daily_dose = st.number_input(
+                f"Daily Dose for Medication {i+1}",
+                min_value=1,
+                key=f"dose_{i}",
+                format="%d",
+            )
+            remaining = st.number_input(
+                f"Units Remaining for Medication {i+1}",
+                min_value=0,
+                key=f"remaining_{i}",
+                format="%d",
+            )
             meds.append({'name': name, 'daily_dose': int(daily_dose), 'remaining': int(remaining)})
 
         st.markdown("### New Medication Details")
@@ -190,9 +235,24 @@ else:
         sync_date = st.date_input("Desired Sync Date")
         submitted = st.form_submit_button("Calculate")
 
+    return submitted, meds, new_med, sync_date
+
+
+def show_calculator():
+    st.title("Medication Sync Calculator")
+    if st.sidebar.button("Logout"):
+        _handle_logout()
+    st.write("Calculate how many units are needed to align all medications, including a new one, to the same refill date.")
+    submitted, meds, new_med, sync_date = _render_medication_form()
     if submitted:
-        result = calculate_sync_quantities(meds, new_med, sync_date.strftime("%Y-%m-%d"))
+        result = calculate_sync_quantities(meds, new_med, sync_date)
         if result:
             st.subheader("Sync Plan")
             for med in result:
                 st.write(f"**{med['name']}**: {med['units_needed']} units needed to sync by {sync_date}")
+
+
+if 'user' not in st.session_state:
+    show_login()
+else:
+    show_calculator()

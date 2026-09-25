@@ -119,3 +119,34 @@ def test_empty_new_medication_name_returns_empty():
     sync_date = _future_date(15)
     new_med = {'name': '', 'daily_dose': 1}
     assert calculate_sync_quantities([], new_med, sync_date) == []
+
+
+def test_sync_date_as_date_object_is_supported():
+    """The calculator should accept a future date object from Streamlit date_input."""
+    sync_date = date.today() + timedelta(days=7)
+    new_med = {'name': 'NewMed', 'daily_dose': 2}
+    result = calculate_sync_quantities([], new_med, sync_date)
+    assert result[0]['units_needed'] == 14
+
+
+def test_non_positive_existing_dose_returns_empty():
+    """Existing medication dose must be a positive integer."""
+    sync_date = _future_date(15)
+    current_meds = [{'name': 'MedA', 'daily_dose': 0, 'remaining': 5}]
+    new_med = {'name': 'NewMed', 'daily_dose': 1}
+    assert calculate_sync_quantities(current_meds, new_med, sync_date) == []
+
+
+def test_negative_remaining_units_returns_empty():
+    """Existing medication remaining units cannot be negative."""
+    sync_date = _future_date(15)
+    current_meds = [{'name': 'MedA', 'daily_dose': 1, 'remaining': -1}]
+    new_med = {'name': 'NewMed', 'daily_dose': 1}
+    assert calculate_sync_quantities(current_meds, new_med, sync_date) == []
+
+
+def test_non_positive_new_medication_dose_returns_empty():
+    """New medication dose must be a positive integer."""
+    sync_date = _future_date(15)
+    new_med = {'name': 'NewMed', 'daily_dose': 0}
+    assert calculate_sync_quantities([], new_med, sync_date) == []
