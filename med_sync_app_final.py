@@ -111,6 +111,14 @@ def calculate_sync_quantities(current_meds, new_med, sync_date):
 if 'user' not in st.session_state:
     show_login()
 else:
+    if st.sidebar.button("Log out"):
+        try:
+            supabase.auth.sign_out()
+        except Exception:
+            logger.warning("Supabase sign-out failed", exc_info=True)
+        del st.session_state['user']
+        st.rerun()
+
     st.title("Medication Sync Calculator")
     st.write("Calculate how many units are needed to align all medications, including a new one, to the same refill date.")
 
