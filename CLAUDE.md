@@ -32,7 +32,7 @@ Single-page Streamlit app with Supabase Auth (email/password). No data is persis
 
 ### Auth flow
 
-`st.session_state['user']` is set on successful `supabase.auth.sign_in_with_password`. The top-level `if/else` near the bottom of `med_sync_app_final.py` gates the entire app on this key. There is no logout — a page refresh clears session state.
+`st.session_state['user']` is set on successful `supabase.auth.sign_in_with_password`. The top-level `if/else` near the bottom of `med_sync_app_final.py` gates the entire app on this key. The sidebar "Log out" button signs out and clears the key; a page refresh also clears session state.
 
 ### Core calculation (`calculate_sync_quantities`)
 
